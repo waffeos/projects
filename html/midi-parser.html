@@ -1,0 +1,314 @@
+<!doctype HTML>
+
+<!--  
+
+Hello There!
+
+created by waffeos (aka happywaffle0)
+for a scratch project
+https://scratch.mit.edu/projects/1119693988/
+
+-->
+
+<html>
+    <head>
+        <style>
+            body {
+                background: lightgrey;
+                font-family: monospace;
+            }
+            #output {
+                height: 150px;
+                overflow-y: scroll;
+            }
+        </style>
+        <title>midi parser</title>
+    </head>
+    <body>
+        <h2>Parse Midi Here!</h2>
+        <input type="file" id="input" accept=".mid">
+        <p id="output">output goes here:</p>
+        <p id="tempo">tempo: 60</p>
+        <script>
+window.onerror = function(message, source, lineno, colno, error) {
+    
+    alert(`${message} at ${lineno}:${colno} ${source}`)
+  
+    return true;
+}; // supposed to be a temp script, idk why i kept it here lol
+        </script>
+        <script>
+
+// please excuse for my lack of semicolons, thanks!
+
+const output = document.getElementById("output")
+const input = document.getElementById("input")
+
+input.addEventListener("input", (e) => {
+    // most generic file-reading system
+  
+    const file = e.target.files[0] 
+    if (file) {
+        
+        document.getElementById("output").textContent = "processing..."
+        
+        const reader = new FileReader()
+        reader.onload = (e) => {
+            output.innerHTML = parseBytes(parseBuffer(e.target.result))
+        }
+        reader.readAsArrayBuffer(file)
+        
+    } else {
+        alert("an error occurred getting your file!")
+    }
+})
+
+function parseBuffer(buffer) {
+    const raw = new Uint8Array(buffer) // turns the buffer to array of bytes.
+    return Array.from(raw).map((byte) => byte.toString(16).padStart(2, "0"))
+}
+
+function parseBytes(data) {
+    
+    const tempo = getTempo(data)
+    document.getElementById("tempo").textContent = "tempo: " + tempo
+    
+    const tracks = getMidiTracks(data) // gets data of tracks
+    let trackData = getTrackData(tracks) // gets data from recorded tracks
+    
+    return finalize(...trackData, tempo); // self-explanatory.
+} 
+
+function getTempo(data) {
+    let tempo = 0
+    let i = 0
+    do {
+        i++
+        
+        if (i > data.length) return 120;
+        
+    } while(JSON.stringify(data.slice(i,i+3)) != JSON.stringify(["ff", "51", "03"]));
+    i += 3
+    tempo = Number((60000000 / parseInt((data.slice(i,i+3)).join(""), 16)).toFixed(2)) + 1 - 1
+    return tempo
+}
+
+function getMidiTracks(data) {
+    let result = [[], []]
+    
+    let searchFor = "trackSig"
+    let trackDat = []
+
+    for (let i = 0; i < data.length; i++) {
+        let byte = data[i]
+                
+        switch(searchFor) {
+            case ("trackSig"): {
+                if (JSON.stringify(data.slice(i, i+4)) == JSON.stringify(["4d","54","72","6b"])) { // searches for MTrk signature
+                    searchFor = "bytes"
+                    i += 7
+                }
+                break;
+                
+            } case ("bytes"): {
+                if (JSON.stringify(data.slice(i, i+3)) == JSON.stringify(["ff", "2f", "00"])) { // searches for end track
+                    searchFor = "trackSig"
+                    result.push(trackDat)
+                    trackDat = []
+                    i += 2
+                } else {
+                    trackDat.push(byte) // puts track data into array
+                }
+                
+                break;
+                
+            } default: break;
+        }
+    }
+    
+    return result;
+}
+
+function getTrackData(tracks) { // tempo parameter?
+        
+    let result = [[],[]]
+    
+    tracks.forEach((track) => {
+        
+        let deltaTime = 0
+                
+        lookingFor = "delta" // first bytes of a track is always deltatime
+        let deltaBytes = []
+            
+        let lastStatusByte = null // we keep track of this for the case of Running Status.
+        
+        for (let i = 0; i < track.length; i++) {
+            let byte = track[i]
+            
+            switch(lookingFor) {
+                
+                case("delta"): {      
+                    if (`${parseInt(byte, 16).toString(2).padStart(8,"0")}`[0] == "1") {
+                        deltaBytes.push(byte) // append and keep going current byte if most sig bit is 1
+                    } else {
+                        deltaBytes.push(byte)
+                        deltaTime += parseDelta(deltaBytes) // append and stop if most sig bit is 0
+                                                
+                        deltaBytes = []
+                        lookingFor = "status" // gotta find status byte (if there's one) next!
+                    }
+                    
+                    break;
+                } case("status"): {
+
+                    let Byte2 = `${parseInt(byte, 16).toString(2).padStart(8,"0")}` // save a bit of comp power
+                                        
+                    if (Byte2[0] == "0") { // Event bytes always have their most sig bit as 1, if the most sig bit is NOT one, then running status is assumed.
+                        
+                        if (lastStatusByte == null) { // detecting running status before status byte
+                            alert(`An error occurred processing your file: Expected status byte (0x80 to 0xff), got ${byte}`)
+                            throw new Error("Fatal error occurred. Stopping the script...")
+                        }               
+                        
+                        lastStatusByte = lastStatusByte
+                        
+                        i--
+                        
+                    } else { // idk why the fuck this isn't a switch case
+                        
+                        if (byte[0] == "9") { // look for NoteOn event (9n)
+                            lastStatusByte = "90"
+                            
+                        } else if (byte[0] == "8") { // noteOff
+                            lastStatusByte = "80"
+                            
+                        } else if (byte[0] == "f") { // meta
+                            lastStatusByte = "ff"
+                            
+                        } else if (byte[0] == "b") { // some other crap idk
+                            lastStatusByte = "b0"
+                            
+                        } else if (byte[0] == "c") {
+                            lastStatusByte = "c0"
+                            
+                        } else if (byte[0] == "d") {
+                            lastStatusByte = "d0"
+                            
+                        } else if (byte[0] == "e") {
+                            lastStatusByte = "e0"
+                            
+                        } else if (byte[0] == "a") {
+                            lastStatusByte = "a0"
+                            
+                        } // cmon its 89abcdef not 98fbcdea wtf?
+                    }
+                    
+                    lookingFor = "data"
+                    
+                    break;
+                } case("data"): {
+                                                  
+                    if (lastStatusByte == "90") {
+                        if (track[i+1] != "00") { // 90nn00 == NoteOff
+                                result[0].push({
+                                note: parseInt(track[i],16),
+                                velocity: parseInt(track[i+1],16),
+                                time: deltaTime
+                            })
+                            
+                        }
+                        i++
+                        
+                    } else if (lastStatusByte == "80") {
+                        i++
+                    } else if (lastStatusByte == "ff") { // checks for meta event
+                        if (byte == "51") { // tempo meta event
+                            result[1].push({
+                                tempo: Number((60000000 / parseInt((track.slice(i+2,i+5)).join(""), 16)).toFixed(2)) // turns tempo bytes into tempo (bpm)
+                                ,time: deltaTime
+                            })
+                        }
+                        
+                        i += parseInt(track[i+1], 16) + 1;
+                    } else if (lastStatusByte == "a0") {
+                        i++
+                    } else if (lastStatusByte == "b0") {
+                        i++
+                    } else if (lastStatusByte == "c0") {
+                        i += 0
+                    } else if (lastStatusByte == "d0") {
+                        i += 0
+                    } else if (lastStatusByte == "e0") {
+                        i++
+                    } 
+                    
+                    lookingFor = "delta"
+                    break;
+                }
+                
+            }// end of switch
+            
+        } // end of for loop
+        
+    }) // end of forEach loop
+    
+    result = result.map((dat) => dat.sort((a,b) => a.time - b.time)) // sorts both object-arrays by ascending time
+    
+    return result;
+}
+
+function finalize(noteData, tempoData, tempo) {
+    result = ""
+    
+    function adjustDelta(tempoDat, bpm) { // adjusts deltatime based off current recorded tempo and starting tempo. (i.e. start = 60, current = 120, x0.5 offset)
+        
+        let currTime = 0
+        let lastTime = 0
+        let lastTempo = bpm
+        let result = []
+        
+        tempoDat.forEach((data) => {
+            result.push(Array(data.time - lastTime).fill(0).map((item) => { // determines and appends new delta values
+                currTime += bpm / lastTempo
+                return currTime
+            }))
+            
+            lastTempo = data.tempo
+            lastTime = data.time
+        })
+        
+        result.push(Array(2560000).fill(0).map((item) => { // idk
+            currTime += bpm / lastTempo;
+            return currTime
+        }))
+        
+        return result.flat(Infinity); // whyisthishere?
+    }
+    
+    let offsetDelta = adjustDelta(tempoData, tempo)
+    
+    noteData.forEach((data) => {
+        note = data.note
+        time = Number((offsetDelta[data.time] / 480).toFixed(3)) // forgor tickdiv. will add soon
+        vel = data.velocity
+        result += `${note}-${vel}-${time}/` // puts it in format
+    })
+    
+    return result
+}
+
+function parseDelta(dt) {
+    let bits = ""
+    
+    bin = dt.map((byte) => `${parseInt(byte, 16).toString(2).padStart(8,"0")}`) // cast hex to binary
+    
+    bin.forEach((byte) => {
+        bits += byte.split("").slice(1,8).join("") // only bottom 7 bits get used for deltatime
+    })
+    
+    result = parseInt(bits,2) // cast result binary to base 10 int
+    return result
+}
+        </script>
+    </body>
+</html>
