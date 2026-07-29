@@ -1,6 +1,8 @@
 # Welcome!
-### This is my repo for some projects I made
-I'll use this for showcasing many and most of the different things I created.
+### info
+This is a repo that I created to showcase projects I've created here.
+
+just ravage through the /html folder and try to check out what I've got here.  
 
 ## stuff so far
 ### piano roll
@@ -9,4 +11,4 @@ I created a parser that parses .mid here, in javascript [here](https://github.co
 
 ## future projects
 ### a game
-Soon will be making a puzzle game involving dice.
+soon, I will be making a puzzle game involving dice.
