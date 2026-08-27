@@ -12,5 +12,7 @@ a [project](https://scratch.mit.edu/projects/1119693988/) made in scratch that f
 I created a parser that parses .mid here, in javascript [here](https://github.com/waffeos/projects/blob/main/html/midi-parser.html)
 
 ## future projects
+* work with scratchattach and scratch cloud vars
+
 ### a game
-soon, I will be making a puzzle game involving dice.
+A puzzle game, involving dice
